@@ -1,0 +1,51 @@
+
+# API keys and environment variables
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local configuration and databases
+config.local.*
+*.sqlite3
+*.db
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# IDE and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local datasets and outputs (review before committing)
+data/
+datasets/
+results/
+
+daily_data_with_outcomes.csv
+
+# Large generated datasets and local market data
+daily_data/
+Raw data/
+daily_data_with_outcomes.csv
+vol_forecast_history.csv

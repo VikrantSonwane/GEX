@@ -1,0 +1,11 @@
+arch>=6.3
+pymannkendall>=1.4
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+kotakneoapi
+python-dotenv>=1.0
+# jugaad-data   # only needed if config.HISTORICAL_DATA_SOURCE = "jugaad"
+                 # (recommended default if you don't have your own CSV)
+# yfinance>=0.2  # only needed if config.HISTORICAL_DATA_SOURCE = "yfinance"
+                  # or TREND_TIMEFRAME_SOURCE = "intraday" via yfinance
