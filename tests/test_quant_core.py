@@ -141,6 +141,8 @@ def test_gex_is_explicitly_an_assumption_not_observed_dealer_inventory():
     assert result["dealer_regime"] == "neutral_gamma"
     assert result["positioning_assumption"] == "dealer_long_calls_short_puts"
     assert result["dealer_positions_observed"] is False
+    assert result["open_interest_unit_assumption"] == "contracts"
+    assert result["contract_multiplier_applied"] == 10
     assert result["net_delta_exposure"] == pytest.approx(10000.0)
 
 
