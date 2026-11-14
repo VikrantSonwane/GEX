@@ -159,11 +159,12 @@ def test_gex_requires_verified_contract_multiplier():
 
 def test_egarch_multi_session_forecast_uses_simulation_path():
     rng = np.random.default_rng(2026)
-    returns = pd.Series(rng.standard_t(df=6, size=350) * 0.8)
+    returns = pd.Series(rng.standard_t(df=6, size=350) * 0.01)
     fitted = arch_model(
         returns * 100.0, mean="Constant", vol="EGARCH",
         p=1, o=1, q=1, dist="t"
     ).fit(disp="off", show_warning=False)
+    assert fitted.convergence_flag == 0
     engine = VolatilityForecastEngine()
     engine.fitted_model = fitted
     engine.model_name = "egarch"
