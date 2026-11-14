@@ -1,11 +1,10 @@
 """
-Statistical utilities used by the research and signal layers.
+Statistical utilities shared by the research and signal layers.
 
-Tests on price levels can be spuriously significant because price levels
-are strongly autocorrelated. The trend helper therefore operates on
-returns and uses a Hamed-Rao modified Mann-Kendall test by default.
-This adjusts the variance for serial correlation; it does not eliminate
-the need for out-of-sample validation.
+The trend test is applied to log-price levels because the research
+question is whether price has a monotonic path over the observation
+window. Hamed-Rao variance correction adjusts for serial correlation;
+it does not replace walk-forward validation.
 """
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ TRADING_DAYS_PER_YEAR = 252
 
 
 def log_returns(prices: pd.Series) -> pd.Series:
-    """Validated log returns; invalid/non-positive prices are rejected."""
+    """Validated log returns from strictly positive prices."""
     values = pd.to_numeric(prices, errors="coerce").astype(float)
     if (values.dropna() <= 0).any():
         raise ValueError("Prices must be strictly positive to compute log returns.")
@@ -38,26 +37,30 @@ def realized_volatility(intraday_returns: pd.Series, bars_per_day: int | None = 
 def trend_test(closes: pd.Series, alpha: float = 0.05,
                method: str = "hamed_rao") -> dict:
     """
-    Modified Mann-Kendall inference on log returns, not trending price levels.
+    Modified Mann-Kendall test on log prices.
 
-    Daily returns are the input so the test concerns directional drift in
-    increments. Hamed-Rao variance correction mitigates autocorrelation
-    distortion; use 'original' only for independent observations.
+    Log transformation preserves price ordering while reducing scale
+    effects. Hamed-Rao modifies the test variance for serial correlation,
+    a material concern for price-level time series. 'original' is exposed
+    only for diagnostics/comparison, not as the default.
     """
     if not 0 < alpha < 1:
         raise ValueError("alpha must lie strictly between 0 and 1.")
-    returns = log_returns(closes)
-    if len(returns) < 8:
+    prices = pd.to_numeric(closes, errors="coerce").dropna().astype(float)
+    if (prices <= 0).any():
+        raise ValueError("Trend prices must be strictly positive.")
+    log_prices = np.log(prices.to_numpy(dtype=float))
+    if len(log_prices) < 8:
         return {"direction": "insufficient_data", "p_value": None,
                 "tau": None, "slope": None, "significant": False,
-                "observations": int(len(returns)), "method": method,
-                "input": "log_returns"}
-    if not np.isfinite(returns.to_numpy()).all():
-        raise ValueError("Trend input contains non-finite returns.")
+                "observations": int(len(log_prices)), "method": method,
+                "input": "log_prices"}
+    if not np.isfinite(log_prices).all():
+        raise ValueError("Trend input contains non-finite prices.")
     if method == "hamed_rao":
-        result = mk.hamed_rao_modification_test(returns.to_numpy(), alpha=alpha)
+        result = mk.hamed_rao_modification_test(log_prices, alpha=alpha)
     elif method == "original":
-        result = mk.original_test(returns.to_numpy(), alpha=alpha)
+        result = mk.original_test(log_prices, alpha=alpha)
     else:
         raise ValueError("method must be 'hamed_rao' or 'original'")
     direction = "up" if result.trend == "increasing" else (
@@ -66,13 +69,13 @@ def trend_test(closes: pd.Series, alpha: float = 0.05,
         direction = "no_trend"
     return {"direction": direction, "p_value": float(result.p),
             "tau": float(result.Tau), "slope": float(result.slope),
-            "significant": bool(result.h), "observations": int(len(returns)),
-            "method": method, "input": "log_returns"}
+            "significant": bool(result.h), "observations": int(len(log_prices)),
+            "method": method, "input": "log_prices"}
 
 
 def distributional_regime(current_value: float, history: pd.Series,
                           min_history: int = 20) -> dict:
-    """Classify against strictly prior forecasts; caller must exclude current day."""
+    """Classify current forecast against strictly prior forecast history."""
     value = float(current_value)
     hist = pd.to_numeric(history, errors="coerce").dropna()
     hist = hist[np.isfinite(hist.to_numpy())]
@@ -105,7 +108,7 @@ def select_best_by_information_criterion(fits: dict, criterion: str = "bic"):
 
 
 def forecast_error_metrics(actual: pd.Series, forecast: pd.Series) -> dict:
-    """Out-of-sample volatility forecast metrics on aligned, positive variance proxies."""
+    """Out-of-sample volatility forecast metrics on aligned positive variance proxies."""
     paired = pd.concat([actual.rename("actual"), forecast.rename("forecast")], axis=1).dropna()
     paired = paired[(paired["actual"] > 0) & (paired["forecast"] > 0)]
     if paired.empty:
