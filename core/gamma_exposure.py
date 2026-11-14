@@ -123,7 +123,7 @@ class GammaExposureEngine:
 
         flip_point = None
         if t_years is not None and "iv" in df.columns:
-            flip_point = self._find_gamma_flip(df, sign, spot, t_years, risk_free_rate,
+            flip_point = self._find_gamma_flip(df, dealer_position_sign, spot, t_years, risk_free_rate,
                                                  flip_search_range_pct, flip_search_points)
 
         call_gex_by_strike = df[is_call].groupby("strike")["strike_gex"].sum()
