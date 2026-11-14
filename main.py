@@ -25,6 +25,7 @@ from __future__ import annotations
 import time
 import datetime as dt
 import os
+from math import ceil
 import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
@@ -229,10 +230,15 @@ def get_contract_multiplier(feed: KotakDataFeed) -> int:
         print(f"[contract] lot size read live from scrip master: {multiplier}")
         return multiplier
     except Exception as e:
-        print(f"[warn] live lot size lookup failed ({e}); falling back to "
-              f"config.CONTRACT_MULTIPLIER_FALLBACK={config.CONTRACT_MULTIPLIER_FALLBACK}. "
-              f"Verify this is still correct before trusting any GEX numbers.")
-        return config.CONTRACT_MULTIPLIER_FALLBACK
+        fallback = config.CONTRACT_MULTIPLIER_FALLBACK
+        if fallback is None or int(fallback) <= 0:
+            raise RuntimeError(
+                "Live contract lot-size lookup failed. No verified fallback is configured; "
+                "refusing to calculate GEX with an unknown contract multiplier."
+            ) from e
+        print(f"[warn] live lot size lookup failed ({e}); using explicit fallback={fallback}. "
+              "Verify it against the current exchange contract specification.")
+        return int(fallback)
 
 
 def session_trend(feed: KotakDataFeed, daily_closes: pd.Series):
@@ -359,7 +365,13 @@ def live_loop(feed: KotakDataFeed, vol_engine: VolatilityForecastEngine,
 
             atm_iv = estimate_atm_iv(chain, spot)
             next_vol = vol_engine.forecast_next_session_vol()
-            vrp = vol_engine.volatility_risk_premium(implied_vol_annualized=atm_iv)
+            # Compare expiry-matched implied volatility with the GARCH term
+            # forecast over approximately the same number of trading sessions.
+            expiry_horizon_sessions = max(1, int(ceil(t_years * 252)))
+            vrp = vol_engine.volatility_risk_premium(
+                implied_vol_annualized=atm_iv,
+                horizon_sessions=expiry_horizon_sessions,
+            )
 
             regime = regime_classifier.classify(
                 current_vol_forecast=next_vol["annualized_vol"],
