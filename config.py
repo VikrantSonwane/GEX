@@ -108,8 +108,8 @@ HIGHER_TF_INTERVAL = "15m"           # yfinance interval string, only used if
 # only trades speed for safety margin without cutting actual waste.
 OPTION_CHAIN_STRIKE_RANGE_PCT = 0.15  # ±15% of spot — comfortably covers
                                         # every strike a 0.40-delta directional
-                                        # pick or a reasonable premium-selling
-                                        # strike would ever need
+                                        # pick a realistic option-buying
+                                        # candidate would ever need
 
 # --- refit / polling cadence ----------------------------------------------
 REFIT_VOL_MODEL_ONCE_PER_SESSION = True   # refit at session start, not per-tick
