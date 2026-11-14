@@ -76,7 +76,20 @@ class VolatilityForecastEngine:
             raise RuntimeError("Call fit() before forecasting.")
         if not isinstance(horizon_sessions, int) or horizon_sessions < 1:
             raise ValueError("horizon_sessions must be a positive integer.")
-        fc = self.fitted_model.forecast(horizon=horizon_sessions, reindex=False)
+        if horizon_sessions == 1:
+            fc = self.fitted_model.forecast(horizon=1, reindex=False, method="analytic")
+        else:
+            # EGARCH does not have a generally available analytic multi-step
+            # variance recursion in arch; simulation supports both candidate
+            # specifications. A fixed seed keeps research runs reproducible.
+            rng = np.random.default_rng(20261114)
+            fc = self.fitted_model.forecast(
+                horizon=horizon_sessions,
+                reindex=False,
+                method="simulation",
+                simulations=10000,
+                rng=rng.standard_normal,
+            )
         variances_pct2 = np.asarray(fc.variance.values[-1, :horizon_sessions], dtype=float)
         if variances_pct2.size != horizon_sessions or not np.isfinite(variances_pct2).all() or (variances_pct2 <= 0).any():
             raise RuntimeError("Invalid or incomplete GARCH variance term-structure forecast.")
