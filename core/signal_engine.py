@@ -9,6 +9,7 @@ unrequested multi-leg credit structure.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import numpy as np
 from core.options_math import black_scholes_delta
 
 
