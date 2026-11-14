@@ -14,6 +14,16 @@ in a test or a percentile calculation instead.
 # --- instrument ---------------------------------------------------------
 UNDERLYING_SYMBOL = "NIFTY"          # or a stock symbol / BANKNIFTY
 EXCHANGE_SEGMENT = "nse_fo"          # per Kotak Neo SDK's segment codes
+
+# --- market inputs and execution conventions --------------------------------
+# Market input: update from a current short-tenor INR risk-free proxy
+# (prefer a maturity-matched T-bill/OIS input); this is not a fitted parameter.
+RISK_FREE_RATE_ANNUALIZED = 0.065
+
+# Operational starting conventions, not empirically optimized thresholds.
+DIRECTIONAL_TARGET_DELTA = 0.40
+STOP_LOSS_VOL_MULTIPLE = 1.0
+TARGET_VOL_MULTIPLE = 2.0
 OPTION_EXPIRY_OVERRIDE = None        # leave None for auto-selection (see
                                       # EXPIRY_SELECTION below). Set an exact
                                       # scrip-master expiry string here ONLY
@@ -26,12 +36,9 @@ EXPIRY_SELECTION = "current"         # "current" -> nearest expiry that hasn't
                                       # every session_start from the live scrip
                                       # master — never a hand-typed date that
                                       # goes stale after rollover.
-EXPIRY_DATE_FORMAT = None            # strptime format matching the scrip
-                                      # master's expiry strings (e.g. "%d-%b-%Y") —
-                                      # read this off inspect_scrip_master.py's
-                                      # output and set it explicitly; None falls
-                                      # back to format-guessing, a bridge, not
-                                      # something to rely on going live.
+EXPIRY_DATE_FORMAT = None            # Kotak Expiries API returns ISO dates.
+                                      # None lets date parsing handle ISO or a
+                                      # manually supplied override format.
 
 # --- timeframes -----------------------------------------------------------
 # Short-term execution timeframe (signal polling / entry timing)
@@ -109,13 +116,10 @@ REFIT_VOL_MODEL_ONCE_PER_SESSION = True   # refit at session start, not per-tick
 SIGNAL_POLL_SECONDS = 90                  # how often the live loop checks for a new signal
 
 # --- contract spec ---------------------------------------------------------
-# Lot size is now read live from the scrip master at session start
-# (data/kotak_client.py's get_lot_size()) instead of being hard-coded
-# here — NSE revises it periodically and a stale config constant would
-# silently corrupt every GEX number. This fallback is used ONLY if that
-# live lookup fails for some reason (e.g. scrip master column name
-# mismatch) — treat a run that falls back to this as a signal to fix
-# the lookup, not as normal operation.
+# Lot size is read from Kotak Option Chain common_data.mktLot at session
+# start instead of being hard-coded here. A stale lot size corrupts GEX.
+# Fallback stays disabled unless the user explicitly verifies a current
+# contract specification.
 CONTRACT_MULTIPLIER_FALLBACK = None  # Fail closed if live lot-size lookup fails.
                                        # Never reuse a stale NSE lot size in GEX math.
 
