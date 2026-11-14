@@ -58,8 +58,9 @@ class KotakDataFeed:
     @staticmethod
     def _raise_for_api_error(response: Any, operation: str) -> None:
         if isinstance(response, dict):
+            payload = response.get("data", response)
             errors = response.get("error") or response.get("errors")
-            status = str(response.get("status", "")).lower()
+            status = str(payload.get("status", response.get("status", ""))).lower() if isinstance(payload, dict) else ""
             if errors or status in {"error", "failed", "failure"}:
                 raise RuntimeError(f"Kotak {operation} failed: {errors or response}")
 
@@ -113,13 +114,15 @@ class KotakDataFeed:
     def _fetch_chain_payload(self, symbol: str, expiry: str | None,
                              exchange_segment: str, instrument_type: str,
                              count: int | None = None) -> dict:
-        response = self._client().option_chain(
-            exchange=exchange_segment,
-            underlying=symbol,
-            expiry=self._iso_date(expiry) if expiry else None,
-            instrument_type=instrument_type,
-            count=count or self.option_chain_count,
-        )
+        kwargs = {
+            "exchange": exchange_segment,
+            "underlying": symbol,
+            "expiry": self._iso_date(expiry) if expiry else None,
+            "instrument_type": instrument_type,
+        }
+        if instrument_type != "fut":
+            kwargs["count"] = count or self.option_chain_count
+        response = self._client().option_chain(**kwargs)
         return self._data(response)
 
     def get_lot_size(self, symbol: str, exchange_segment: str) -> int:
