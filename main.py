@@ -241,12 +241,12 @@ def session_start_fit(feed: KotakDataFeed):
 
 
 def get_contract_multiplier(feed: KotakDataFeed) -> int:
-    """Reads lot size live from the scrip master; falls back to the
-    config constant only if that lookup fails, and says so loudly since
-    a fallback here means the live source didn't work as expected."""
+    """Reads lot size live from Kotak Option Chain common_data.mktLot.
+    An unverified fallback is not used: wrong contract units corrupt GEX."""
+
     try:
         multiplier = feed.get_lot_size(config.UNDERLYING_SYMBOL, config.EXCHANGE_SEGMENT)
-        print(f"[contract] lot size read live from scrip master: {multiplier}")
+        print(f"[contract] lot size read live from Kotak option-chain metadata: {multiplier}")
         return multiplier
     except Exception as e:
         fallback = config.CONTRACT_MULTIPLIER_FALLBACK
@@ -296,7 +296,11 @@ def live_loop(feed: KotakDataFeed, vol_engine: VolatilityForecastEngine,
               trend_result: dict, forecast_history: pd.Series, contract_multiplier: int,
               option_expiry: str):
     regime_classifier = RegimeClassifier()
-    signal_engine = OptionsSignalEngine()
+    signal_engine = OptionsSignalEngine(
+        directional_target_delta=config.DIRECTIONAL_TARGET_DELTA,
+        stop_loss_vol_multiple=config.STOP_LOSS_VOL_MULTIPLE,
+        target_vol_multiple=config.TARGET_VOL_MULTIPLE,
+    )
     gamma_engine = GammaExposureEngine(contract_multiplier=contract_multiplier)
     realized_vol_tracker = RealizedVolTracker()
     iv_guard = IVOutlierGuard()
@@ -330,9 +334,9 @@ def live_loop(feed: KotakDataFeed, vol_engine: VolatilityForecastEngine,
                       f"skipping this cycle (check for a quotes() batch failure above).")
                 time.sleep(config.SIGNAL_POLL_SECONDS)
                 continue
-            risk_free_rate = 0.065  # short-term discount rate ONLY now (forward already
-                                     # embeds cost-of-carry) — still a market input to
-                                     # keep current, just a much smaller lever than before
+            risk_free_rate = float(config.RISK_FREE_RATE_ANNUALIZED)
+            if not np.isfinite(risk_free_rate):
+                raise ValueError("RISK_FREE_RATE_ANNUALIZED must be finite.")
 
             # chain has REAL strike/oi/ltp from Kotak. IV and greeks aren't
             # provided by the broker, so back IV out of the real LTP using the
