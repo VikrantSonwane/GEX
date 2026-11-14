@@ -65,20 +65,41 @@ import dashboard_server
 
 
 def load_forecast_history() -> pd.Series:
-    if not os.path.exists(config.VOL_FORECAST_HISTORY_PATH):
+    """Load strictly prior-session forecasts; today's value must not set today's cutoffs."""
+    path = Path(config.VOL_FORECAST_HISTORY_PATH)
+    if not path.exists():
         return pd.Series(dtype=float)
-    df = pd.read_csv(config.VOL_FORECAST_HISTORY_PATH, parse_dates=["date"])
-    return df.set_index("date")["annualized_vol"]
+    df = pd.read_csv(path, parse_dates=["date"])
+    if df.empty or not {"date", "annualized_vol"}.issubset(df.columns):
+        return pd.Series(dtype=float)
+    df["annualized_vol"] = pd.to_numeric(df["annualized_vol"], errors="coerce")
+    df = df.dropna(subset=["date", "annualized_vol"])
+    # A restart on the same day must not make the current forecast part of
+    # the reference distribution used to classify that same forecast.
+    today = pd.Timestamp(dt.datetime.now().date())
+    df = df[df["date"].dt.normalize() < today]
+    df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+    return df.set_index("date")["annualized_vol"].astype(float)
 
 
 def append_forecast_history(annualized_vol: float, model_used: str):
+    """Upsert one forecast per calendar session (restarts do not overweight a day)."""
+    path = Path(config.VOL_FORECAST_HISTORY_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
     row = pd.DataFrame([{
-        "date": dt.datetime.now().date(),
-        "annualized_vol": annualized_vol,
-        "model_used": model_used,
+        "date": pd.Timestamp(dt.datetime.now().date()),
+        "annualized_vol": float(annualized_vol),
+        "model_used": str(model_used),
     }])
-    header = not os.path.exists(config.VOL_FORECAST_HISTORY_PATH)
-    row.to_csv(config.VOL_FORECAST_HISTORY_PATH, mode="a", header=header, index=False)
+    if path.exists():
+        existing = pd.read_csv(path, parse_dates=["date"])
+        if {"date", "annualized_vol", "model_used"}.issubset(existing.columns):
+            row = pd.concat([existing, row], ignore_index=True)
+    row["date"] = pd.to_datetime(row["date"], errors="coerce")
+    row["annualized_vol"] = pd.to_numeric(row["annualized_vol"], errors="coerce")
+    row = row.dropna(subset=["date", "annualized_vol"])
+    row = row.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+    row.to_csv(path, index=False)
 
 
 def resolve_option_expiry(feed: KotakDataFeed) -> str:
