@@ -38,9 +38,10 @@ EXPIRY_DATE_FORMAT = None            # strptime format matching the scrip
 LOWER_TF_INTERVAL = "5minute"
 
 # --- historical data source ------------------------------------------------
-# Kotak has no historical-candle endpoint (confirmed live, see
-# data/historical_source.py's module docstring). Three ways to supply
-# daily history instead:
+# Kotak's current SDK exposes historical OHLC candles, but this
+# orchestrator does not yet route that endpoint into the fit loader.
+# Until that integration is completed and tested, use one of these
+# explicit history sources:
 HISTORICAL_DATA_SOURCE = "csv"       # "csv" (your own data), "jugaad" (pulls
                                       # daily NSE data live, no file needed),
                                       # or "yfinance" (Yahoo Finance)
