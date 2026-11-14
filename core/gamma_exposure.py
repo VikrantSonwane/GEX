@@ -170,6 +170,8 @@ class GammaExposureEngine:
             "regime_note": regime_note,
             "positioning_assumption": "dealer_long_calls_short_puts",
             "dealer_positions_observed": False,
+            "open_interest_unit_assumption": "contracts",
+            "contract_multiplier_applied": int(self.contract_multiplier),
             "valid_chain_rows": int(len(df)),
             "invalid_chain_rows_excluded": int(len(chain_df) - len(df)),
             "gamma_flip_point": flip_point,
