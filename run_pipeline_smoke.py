@@ -49,6 +49,15 @@ vrp = vol_engine.volatility_risk_premium(implied_vol_annualized=forecast["annual
 print(vrp)
 assert abs(vrp["vrp_ratio"] - 0.2) < 1e-6
 
+# Expiry-horizon VRP exercises multi-step conditional variance forecasting.
+term_vrp = vol_engine.volatility_risk_premium(
+    implied_vol_annualized=forecast["annualized_vol"] * 1.2,
+    horizon_sessions=5,
+)
+print("Five-session term VRP:", term_vrp)
+assert term_vrp["horizon_sessions"] == 5
+assert np.isfinite(term_vrp["forecast_vol"]) and term_vrp["forecast_vol"] > 0
+
 print("\n=== 3. Trend Engine (higher timeframe proxy: last 60 sessions) ===")
 trend_engine = TrendEngine()
 trend_result = trend_engine.analyze(price_series.tail(60))
