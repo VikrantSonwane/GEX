@@ -25,7 +25,7 @@ from __future__ import annotations
 import time
 import datetime as dt
 import os
-from math import ceil
+from math import ceil, isfinite
 import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
@@ -109,7 +109,7 @@ def resolve_option_expiry(feed: KotakDataFeed) -> str:
     without you editing config.py every week. Logic:
 
       1. If config.OPTION_EXPIRY_OVERRIDE is set, use it verbatim (manual pin).
-      2. Otherwise, pull every live expiry from the scrip master, drop any
+      2. Otherwise, query Kotak's Expiries API, drop any
          that have already passed market close TODAY (so on expiry day
          itself, before close, today's own expiry still counts as
          "current" — only after close does it roll to next), sort
@@ -132,7 +132,7 @@ def resolve_option_expiry(feed: KotakDataFeed) -> str:
 
     if not live_expiries:
         raise RuntimeError(f"No live (non-expired) expiries found for "
-                            f"{config.UNDERLYING_SYMBOL} — scrip master may be stale "
+                            f"{config.UNDERLYING_SYMBOL} — Kotak expiry data may be stale "
                             f"or the symbol/segment is wrong.")
 
     idx = {"current": 0, "next": 1}.get(config.EXPIRY_SELECTION)
@@ -335,7 +335,7 @@ def live_loop(feed: KotakDataFeed, vol_engine: VolatilityForecastEngine,
                 time.sleep(config.SIGNAL_POLL_SECONDS)
                 continue
             risk_free_rate = float(config.RISK_FREE_RATE_ANNUALIZED)
-            if not np.isfinite(risk_free_rate):
+            if not isfinite(risk_free_rate):
                 raise ValueError("RISK_FREE_RATE_ANNUALIZED must be finite.")
 
             # chain has REAL strike/oi/ltp from Kotak. IV and greeks aren't
