@@ -115,9 +115,8 @@ SIGNAL_POLL_SECONDS = 90                  # how often the live loop checks for a
 # live lookup fails for some reason (e.g. scrip master column name
 # mismatch) — treat a run that falls back to this as a signal to fix
 # the lookup, not as normal operation.
-CONTRACT_MULTIPLIER_FALLBACK = 65   # NSE circular SEBI/HO/MRD-PoD2/CIR/P/2024/00181,
-                                     # effective 30-Dec-2025 EOD — VERIFY this is still
-                                     # current before trusting it; check the live lookup instead.
+CONTRACT_MULTIPLIER_FALLBACK = None  # Fail closed if live lot-size lookup fails.
+                                       # Never reuse a stale NSE lot size in GEX math.
 
 # --- persistence ------------------------------------------------------------
 VOL_FORECAST_HISTORY_PATH = "vol_forecast_history.csv"   # regime terciles are
