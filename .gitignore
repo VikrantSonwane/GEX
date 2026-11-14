@@ -37,8 +37,13 @@ temp/
 .DS_Store
 Thumbs.db
 
-# Local datasets and outputs (review before committing)
-data/
+# Local datasets and outputs (review before committing).
+# Keep Python source adapters under data/ version-controlled; ignore local
+# data files and generated results instead of the entire source package.
+!data/
+data/*
+!data/*.py
+!data/README.md
 datasets/
 results/
 
