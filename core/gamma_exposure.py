@@ -85,12 +85,31 @@ class GammaExposureEngine:
         comparable number across different vol regimes than "140 points"
         is by itself. Omit it and those fields just come back None.
         """
+        required = {"strike", "option_type", "oi", "gamma", "delta"}
+        missing = required.difference(chain_df.columns)
+        if missing:
+            raise ValueError(f"Option chain missing required GEX columns: {sorted(missing)}")
+        if not np.isfinite(spot) or spot <= 0:
+            raise ValueError("spot must be finite and strictly positive.")
+        if self.contract_multiplier is None or int(self.contract_multiplier) <= 0:
+            raise ValueError("A verified positive contract multiplier is required for GEX.")
         df = chain_df.copy()
-        is_call = df["option_type"].str.lower().str.startswith("c")
-        sign = np.where(is_call, 1.0, -1.0)
+        for col in ("strike", "oi", "gamma", "delta"):
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["option_type"] = df["option_type"].astype(str).str.upper()
+        valid_types = df["option_type"].isin({"CE", "PE", "CALL", "PUT"})
+        valid_numeric = np.isfinite(df[["strike", "oi", "gamma", "delta"]]).all(axis=1)
+        valid_domain = (df["strike"] > 0) & (df["oi"] >= 0) & (df["gamma"] >= 0)
+        df = df.loc[valid_types & valid_numeric & valid_domain].copy()
+        if df.empty:
+            raise ValueError("No valid option-chain rows remain for GEX calculation.")
+        is_call = df["option_type"].isin({"CE", "CALL"})
+        # This is an explicit scenario assumption, not observed dealer inventory:
+        # dealers assumed long calls and short puts.
+        dealer_position_sign = np.where(is_call, 1.0, -1.0)
 
-        df["strike_gex"] = sign * df["gamma"] * df["oi"] * (spot ** 2) * 0.01 * self.contract_multiplier
-        df["strike_delta_exposure"] = df["delta"] * df["oi"] * self.contract_multiplier
+        df["strike_gex"] = dealer_position_sign * df["gamma"] * df["oi"] * (spot ** 2) * 0.01 * int(self.contract_multiplier)
+        df["strike_delta_exposure"] = dealer_position_sign * df["delta"] * df["oi"] * int(self.contract_multiplier)
 
         by_strike = df.groupby("strike")["strike_gex"].sum().sort_index()
         total_gex = float(by_strike.sum())
@@ -114,10 +133,21 @@ class GammaExposureEngine:
 
         if total_gex > 0:
             dealer_regime = "positive_gamma"
-            regime_note = "Dealers net long gamma: hedging flow tends to dampen moves (mean-reversion, pinning near high-OI strikes more likely)."
-        else:
+            regime_note = (
+                "Positive GEX under the assumed dealer positioning scenario "
+                "(long calls / short puts). This may imply dampening hedging; "
+                "actual dealer inventory is not observable from OI alone."
+            )
+        elif total_gex < 0:
             dealer_regime = "negative_gamma"
-            regime_note = "Dealers net short gamma: hedging flow tends to amplify moves (trend acceleration, sharper breakouts more likely)."
+            regime_note = (
+                "Negative GEX under the assumed dealer positioning scenario "
+                "(long calls / short puts). This may imply amplifying hedging; "
+                "actual dealer inventory is not observable from OI alone."
+            )
+        else:
+            dealer_regime = "neutral_gamma"
+            regime_note = "Net GEX is zero under the assumed dealer positioning scenario."
 
         spot_vs_flip = None
         if flip_point is not None:
@@ -138,6 +168,10 @@ class GammaExposureEngine:
             "max_pain": max_pain,
             "dealer_regime": dealer_regime,
             "regime_note": regime_note,
+            "positioning_assumption": "dealer_long_calls_short_puts",
+            "dealer_positions_observed": False,
+            "valid_chain_rows": int(len(df)),
+            "invalid_chain_rows_excluded": int(len(chain_df) - len(df)),
             "gamma_flip_point": flip_point,
             "spot_vs_flip": spot_vs_flip,
             "call_wall": call_wall,
