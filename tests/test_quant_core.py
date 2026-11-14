@@ -12,6 +12,8 @@ from utils.stats_utils import (
     trend_test, distributional_regime, select_best_by_information_criterion,
     forecast_error_metrics,
 )
+from arch import arch_model
+from core.volatility_engine import VolatilityForecastEngine
 
 
 def test_black76_put_call_parity():
@@ -152,3 +154,23 @@ def test_gex_requires_verified_contract_multiplier():
     ])
     with pytest.raises(ValueError):
         GammaExposureEngine(contract_multiplier=None).compute(chain, spot=100.0)
+
+
+
+def test_egarch_multi_session_forecast_uses_simulation_path():
+    rng = np.random.default_rng(2026)
+    returns = pd.Series(rng.standard_t(df=6, size=350) * 0.8)
+    fitted = arch_model(
+        returns * 100.0, mean="Constant", vol="EGARCH",
+        p=1, o=1, q=1, dist="t"
+    ).fit(disp="off", show_warning=False)
+    engine = VolatilityForecastEngine()
+    engine.fitted_model = fitted
+    engine.model_name = "egarch"
+    engine.bic_scores = {"egarch": float(fitted.bic)}
+    engine.fit_diagnostics = {}
+    engine.last_fit_returns_len = len(returns)
+    forecast = engine.forecast_horizon_vol(horizon_sessions=5)
+    assert forecast["horizon_sessions"] == 5
+    assert np.isfinite(forecast["horizon_annualized_vol"])
+    assert forecast["horizon_annualized_vol"] > 0
