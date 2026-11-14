@@ -214,13 +214,11 @@ def session_start_fit(feed: KotakDataFeed):
     """
     Steps 1-2: fit the vol model on daily history, persist the forecast.
 
-    Daily closes come from your own CSV, jugaad-data, or Yahoo Finance
-    (see config.HISTORICAL_DATA_SOURCE / data/historical_source.py),
-    NOT Kotak — Kotak Neo's Trade API has no historical-candle endpoint
-    (confirmed by introspecting a live client's real method list: no
-    'historical_data' or equivalent exists). `feed` isn't used here for
-    that reason; it's still passed in for symmetry with the rest of
-    main() and in case a future SDK version adds one.
+    Daily closes come from the configured CSV, jugaad-data, or Yahoo
+    Finance source. The current Kotak Neo SDK also exposes historical_data(),
+    but this project has not yet wired that endpoint into this loader.
+    `feed` is retained for orchestration symmetry; this function makes no
+    broker request and never silently changes historical data provenance.
 
     Returns the fitted engine, the forecast, AND the daily closes
     themselves — session_trend() reuses those closes by default rather
