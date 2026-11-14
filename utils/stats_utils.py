@@ -115,7 +115,8 @@ def forecast_error_metrics(actual: pd.Series, forecast: pd.Series) -> dict:
         raise ValueError("No aligned positive actual/forecast observations.")
     y = paired["actual"].to_numpy(dtype=float)
     f = paired["forecast"].to_numpy(dtype=float)
-    qlike = np.mean(np.log(f) + y / f)
+    ratio = y / f
+    qlike = np.mean(ratio - np.log(ratio) - 1.0)
     return {"n": int(len(paired)), "mae": float(np.mean(np.abs(y - f))),
             "rmse": float(np.sqrt(np.mean(np.square(y - f)))),
             "qlike": float(qlike), "mean_error": float(np.mean(f - y))}
