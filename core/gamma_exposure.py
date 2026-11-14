@@ -3,12 +3,11 @@ gamma_exposure.py
 --------------------
 Dealer gamma exposure (GEX) and net delta positioning, built from the
 option chain's open interest. This is a PROXY, not observed truth: it
-assumes the standard convention used by SpotGamma / SqueezeMetrics-style
-GEX dashboards — that dealers are net long the calls customers sell them
-and net short the puts customers buy from them, i.e. dealer gamma tracks
-+call_OI and -put_OI. That assumption is usually reasonable in aggregate
-for liquid index chains (NIFTY/BANKNIFTY) but can be wrong for any single
-strike or session — treat the output as a probabilistic tilt, not a fact.
+uses one explicitly labelled scenario convention: dealers are assumed
+long calls and short puts, i.e. dealer gamma tracks +call_OI and -put_OI.
+Open interest alone cannot reveal dealer inventory or validate that
+convention. The output is therefore a conditional scenario, not a
+probabilistic claim about actual dealer books.
 
 What it gives you:
   - Net GEX (total): sign tells you the dominant hedging regime.
