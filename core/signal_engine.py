@@ -55,7 +55,7 @@ class OptionsSignalEngine:
                                 target_mult, gamma_note=gamma_note)
 
         if not (np.isfinite(spot) and spot > 0 and np.isfinite(daily_vol)
-                and 0 < daily_vol < 1 and np.isfinite(vrp_ratio)):
+                and daily_vol > 0 and np.isfinite(vrp_ratio)):
             return no_signal("Invalid spot, volatility forecast, or VRP input; refusing to emit a trade.")
         if vol_regime == "insufficient_history":
             return no_signal("Insufficient strictly-prior volatility forecast history for regime classification.")
