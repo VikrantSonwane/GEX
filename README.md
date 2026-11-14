@@ -49,7 +49,7 @@ The current GEX scenario uses the sign convention dealer_long_calls_short_puts:
 - Put contribution: negative gamma × put OI.
 - Both are scaled by spot², 1% and the live contract lot size.
 
-Open interest does not identify who is long or short. The returned object therefore labels the assumed positioning convention and sets dealer_positions_observed = false. Positive/negative GEX, the gamma flip, call wall and put wall are conditional on this assumption and should not be read as verified dealer books. The flip holds current strike IVs fixed while sweeping hypothetical spot; it does not dynamically reshape the volatility smile.
+Open interest does not identify who is long or short. The returned object therefore labels the assumed positioning convention and sets dealer_positions_observed = false. The GEX implementation currently interprets Kotak openInterest.current as a contract count and applies the live market lot; the Kotak response schema does not explicitly document that unit, so reconcile it against the broker/exchange option chain before relying on the absolute GEX magnitude. If the feed already reports underlying units, applying the lot again would scale GEX incorrectly. Positive/negative GEX, the gamma flip, call wall and put wall are conditional on both assumptions and should not be read as verified dealer books. The flip holds current strike IVs fixed while sweeping hypothetical spot; it does not dynamically reshape the volatility smile.
 
 ### Long-only signal policy
 
