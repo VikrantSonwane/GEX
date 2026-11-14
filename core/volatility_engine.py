@@ -25,8 +25,8 @@ class VolatilityForecastEngine:
 
     def fit(self, daily_log_returns: pd.Series, min_obs: int = 250):
         r = pd.to_numeric(daily_log_returns, errors="coerce").dropna().astype(float)
-        if not np.isfinite(r.to_numpy()).all() or (r.abs() > 1).any():
-            raise ValueError("Returns must be finite decimal log returns with absolute value <= 1.")
+        if not np.isfinite(r.to_numpy()).all():
+            raise ValueError("Returns must be finite decimal log returns.")
         if len(r) < min_obs:
             raise ValueError(f"Need >= {min_obs} daily returns; received {len(r)}.")
         scaled = r * 100.0
