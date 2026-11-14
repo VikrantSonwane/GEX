@@ -38,6 +38,7 @@ The system uses the observed futures price as the forward anchor rather than add
 - Vega is per 1.00 (100 percentage-point) change in decimal IV; divide by 100 for per-1%-IV.
 - Theta is calendar-time theta per year, i.e. negative derivative with respect to time-to-expiry.
 - The time-to-expiry input follows the expiry date's exchange close and a calendar-year day count; volatility annualization uses 252 trading days.
+- The continuously compounded risk-free rate is an explicit market input in config.py. Its current 6.5% value is only a starter setting: replace it with a current, maturity-matched INR T-bill/OIS proxy before using IV or Greeks in a live decision.
 
 The weekly-option forward proxy can still differ from the true weekly implied forward when only monthly futures are listed. That basis risk remains an explicit approximation.
 
@@ -55,7 +56,7 @@ Open interest does not identify who is long or short. The returned object theref
 
 The engine emits only LONG_CALL, LONG_PUT or NO_SIGNAL. A positive VRP is treated as a premium-cost diagnostic; it does not trigger a credit spread, straddle sale or other short-premium structure. The current 0.40 target-delta convention and 1x stop / 2x target underlying-volatility multiples are operational starting conventions, not statistically estimated parameters.
 
-The stop/target fields are **underlying-point moves**, not option-premium stop and target prices. Position sizing, portfolio-level Kelly sizing, broker execution, transaction-cost modeling and a validated options backtest are separate workstreams and are not claimed as implemented here.
+The stop/target fields are **underlying-point moves**, not option-premium stop and target prices. Live IV is currently inferred from option LTP; the signal is not yet filtered on executable bid/ask spread or depth. Position sizing, portfolio-level Kelly sizing, broker execution, transaction-cost modeling and a validated options backtest are separate workstreams and are not claimed as implemented here.
 
 ## Data adapters and Kotak Neo
 
