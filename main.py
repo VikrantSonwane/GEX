@@ -370,6 +370,10 @@ def live_loop(feed: KotakDataFeed, vol_engine: VolatilityForecastEngine,
                 print(f"  [iv-guard] excluded {len(iv_outliers)} strike(s) with implausible "
                       f"cycle-over-cycle IV jumps: "
                       f"{iv_outliers[['strike','option_type','iv_change']].to_dict('records')}")
+            if chain.empty:
+                print("  [warn] no option quotes remain after IV outlier filtering — skipping cycle")
+                time.sleep(config.SIGNAL_POLL_SECONDS)
+                continue
 
             chain["delta"] = chain.apply(
                 lambda r: black_scholes_delta(forward, r["strike"], t_years, r["iv"],
@@ -445,6 +449,9 @@ def live_loop(feed: KotakDataFeed, vol_engine: VolatilityForecastEngine,
                 "gex_slope_near_spot": gamma_context["gex_slope_near_spot"],
                 "max_pain": gamma_context["max_pain"],
                 "dealer_regime": gamma_context["dealer_regime"],
+                "positioning_assumption": gamma_context["positioning_assumption"],
+                "dealer_positions_observed": gamma_context["dealer_positions_observed"],
+                "open_interest_unit_assumption": gamma_context["open_interest_unit_assumption"],
                 "gamma_flip_point": gamma_context["gamma_flip_point"],
                 "distance_to_flip": gamma_context["distance_to_flip"],
                 "distance_to_flip_in_expected_moves": gamma_context["distance_to_flip_in_expected_moves"],
