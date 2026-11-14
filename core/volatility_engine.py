@@ -1,20 +1,13 @@
 """
-volatility_engine.py
----------------------
-Fits GJR-GARCH(1,1) and EGARCH(1,1) on daily log returns, lets BIC decide
-which one better describes THIS instrument's volatility dynamics (some
-names show strong leverage/asymmetry, some don't — we don't assume it),
-and produces a forward volatility forecast used by every downstream
-decision (regime, stop-loss sizing, VRP).
+Conditional volatility forecasting with GJR-GARCH(1,1) and EGARCH(1,1).
 
-Both models use a Student-t innovation distribution. That is a
-well-established, standard choice for equity/index returns (fat tails
-are a documented empirical fact, not a discretionary trading parameter)
-— so it's kept fixed rather than "selected," to avoid overfitting model
-choice on top of distribution choice with the same small sample.
+BIC remains a parsimonious in-sample model-selection criterion. It is
+not represented as proof of forecast superiority: production research
+must also compare one-step forecasts out of sample using QLIKE/MAE/RMSE.
 """
-
 from __future__ import annotations
+
+import warnings
 import numpy as np
 import pandas as pd
 from arch import arch_model
@@ -23,107 +16,86 @@ from utils.stats_utils import select_best_by_information_criterion, TRADING_DAYS
 
 
 class VolatilityForecastEngine:
-
     def __init__(self):
         self.fitted_model = None
         self.model_name = None
         self.bic_scores = None
+        self.fit_diagnostics = None
         self.last_fit_returns_len = None
 
     def fit(self, daily_log_returns: pd.Series, min_obs: int = 250):
-        """
-        daily_log_returns: log returns of DAILY closes (%, not decimal —
-        arch_model wants percentage returns for numerical stability, so
-        we scale by 100 internally).
-
-        Requires at least `min_obs` daily observations (~1 trading year)
-        so the (E)GARCH likelihood has enough data to identify persistence
-        and asymmetry parameters reliably. Below that, refuses to fit
-        rather than returning an unstable/garbage forecast.
-        """
-        r = daily_log_returns.dropna()
+        r = pd.to_numeric(daily_log_returns, errors="coerce").dropna().astype(float)
+        if not np.isfinite(r.to_numpy()).all() or (r.abs() > 1).any():
+            raise ValueError("Returns must be finite decimal log returns with absolute value <= 1.")
         if len(r) < min_obs:
-            raise ValueError(
-                f"Need >= {min_obs} daily returns to fit reliably, got {len(r)}. "
-                f"Feeding a GARCH model too little history produces unstable, "
-                f"overfit parameters — that's exactly the 'artificial value' "
-                f"this engine is built to avoid."
-            )
-
+            raise ValueError(f"Need >= {min_obs} daily returns; received {len(r)}.")
         scaled = r * 100.0
-
-        gjr = arch_model(scaled, vol="GARCH", p=1, o=1, q=1, dist="t")
-        egarch = arch_model(scaled, vol="EGARCH", p=1, o=1, q=1, dist="t")
-
-        gjr_fit = gjr.fit(disp="off")
-        egarch_fit = egarch.fit(disp="off")
-
-        fits = {"gjr_garch": gjr_fit, "egarch": egarch_fit}
-        best_name, scores = select_best_by_information_criterion(fits, criterion="bic")
-
+        specifications = {
+            "gjr_garch": arch_model(scaled, mean="Constant", vol="GARCH", p=1, o=1, q=1, dist="t"),
+            "egarch": arch_model(scaled, mean="Constant", vol="EGARCH", p=1, o=1, q=1, dist="t"),
+        }
+        fits, failures = {}, {}
+        for name, model in specifications.items():
+            try:
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    result = model.fit(disp="off", show_warning=False)
+                fits[name] = result
+                if caught:
+                    failures[name] = [str(w.message) for w in caught]
+            except Exception as exc:
+                failures[name] = [f"{type(exc).__name__}: {exc}"]
+        best_name, scores = select_best_by_information_criterion(fits, "bic")
         self.fitted_model = fits[best_name]
         self.model_name = best_name
         self.bic_scores = scores
-        self.last_fit_returns_len = len(r)
+        self.fit_diagnostics = {
+            "candidate_bic": scores,
+            "candidate_warnings_or_failures": failures,
+            "selected_convergence_flag": int(getattr(self.fitted_model, "convergence_flag", -1)),
+            "selected_optimizer_message": str(getattr(getattr(self.fitted_model, "optimization_result", None), "message", "")),
+            "selected_log_likelihood": float(self.fitted_model.loglikelihood),
+            "selected_aic": float(self.fitted_model.aic),
+            "selected_bic": float(self.fitted_model.bic),
+            "selection_note": "BIC is in-sample parsimony; validate forecast quality out of sample.",
+        }
+        self.last_fit_returns_len = int(len(r))
         return self
 
     def forecast_next_session_vol(self, annualize: bool = True) -> dict:
-        """
-        One-step-ahead conditional volatility forecast (i.e. tomorrow's /
-        next session's expected volatility), converted back out of the
-        x100 scaling used for fitting.
-        """
         if self.fitted_model is None:
-            raise RuntimeError("Call .fit() before forecasting.")
-
+            raise RuntimeError("Call fit() before forecasting.")
         fc = self.fitted_model.forecast(horizon=1, reindex=False)
-        variance_pct2 = fc.variance.values[-1, 0]        # variance in (pct-return)^2 units
-        daily_vol = np.sqrt(variance_pct2) / 100.0        # back to decimal daily vol
-
-        annualized_vol = daily_vol * np.sqrt(TRADING_DAYS_PER_YEAR) if annualize else None
-
+        variance_pct2 = float(fc.variance.values[-1, 0])
+        if not np.isfinite(variance_pct2) or variance_pct2 <= 0:
+            raise RuntimeError(f"Invalid GARCH variance forecast: {variance_pct2}")
+        daily_vol = float(np.sqrt(variance_pct2) / 100.0)
+        annualized = daily_vol * np.sqrt(TRADING_DAYS_PER_YEAR) if annualize else None
         return {
-            "model_used": self.model_name,
-            "bic_scores": self.bic_scores,
-            "daily_vol": float(daily_vol),
-            "annualized_vol": float(annualized_vol) if annualized_vol is not None else None,
+            "model_used": self.model_name, "bic_scores": self.bic_scores,
+            "fit_diagnostics": self.fit_diagnostics, "daily_vol": daily_vol,
+            "annualized_vol": float(annualized) if annualized is not None else None,
             "fitted_on_n_obs": self.last_fit_returns_len,
             "leverage_param": self._extract_leverage_param(),
         }
 
     def _extract_leverage_param(self):
-        """
-        Surfaces the fitted asymmetry/leverage coefficient (gamma for
-        GJR-GARCH, the 'o' term for EGARCH) so you can see WHY a model
-        was chosen, not just take the forecast on faith.
-        """
+        if self.fitted_model is None:
+            return None
         params = self.fitted_model.params
         for key in params.index:
-            if key.lower() in ("gamma[1]", "o1"):
+            if key.lower() in {"gamma[1]", "gamma[1]", "o[1]"}:
                 return float(params[key])
         return None
 
     def volatility_risk_premium(self, implied_vol_annualized: float) -> dict:
-        """
-        VRP = implied vol (market's option-priced expectation) vs the
-        GARCH-forecasted realized vol (statistical expectation).
-
-        VRP > 0  -> options priced "expensive" relative to the model's
-                    expectation of realized volatility (favors premium
-                    selling, all else equal).
-        VRP < 0  -> options priced "cheap" relative to model expectation
-                    (favors premium buying / long gamma).
-
-        This is a diagnostic ratio, not a signal by itself — the
-        SignalEngine combines it with trend/regime before suggesting
-        anything.
-        """
+        implied = float(implied_vol_annualized)
         fc = self.forecast_next_session_vol(annualize=True)
         forecast_vol = fc["annualized_vol"]
-        vrp_ratio = (implied_vol_annualized - forecast_vol) / forecast_vol
+        if not np.isfinite(implied) or implied <= 0 or forecast_vol is None or forecast_vol <= 0:
+            raise ValueError("Implied and forecast volatility must be finite and positive.")
         return {
-            "implied_vol": implied_vol_annualized,
-            "forecast_vol": forecast_vol,
-            "vrp_ratio": float(vrp_ratio),
+            "implied_vol": implied, "forecast_vol": forecast_vol,
+            "vrp_ratio": float((implied - forecast_vol) / forecast_vol),
             "model_used": fc["model_used"],
         }
